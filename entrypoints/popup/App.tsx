@@ -1,36 +1,106 @@
-import { useState } from 'react';
-import reactLogo from '@/assets/react.svg';
-import wxtLogo from '/wxt.svg';
+import { useEffect, useState } from 'react';
 import './App.css';
-import { Button } from 'antd';
+import { Alert, Button, Spin, Typography } from 'antd';
+import {
+  inspectOrCreateWebbotGroupForCurrentTab,
+  moveTabToWebbotGroup,
+} from '@/services/tabGroupService';
+
+type ViewState = 'loading' | 'needs-move' | 'in-group' | 'error';
 
 function App() {
-  const [count, setCount] = useState(0);
+  const [viewState, setViewState] = useState<ViewState>('loading');
+  const [message, setMessage] = useState('');
+  const [activeTabId, setActiveTabId] = useState<number | null>(null);
+  const [targetGroupId, setTargetGroupId] = useState<number | null>(null);
+  const [isMoving, setIsMoving] = useState(false);
+
+  const inspectCurrentTab = async () => {
+    setViewState('loading');
+    setMessage('Dang kiem tra tab group...');
+
+    try {
+      const result = await inspectOrCreateWebbotGroupForCurrentTab();
+      setActiveTabId(result.activeTabId);
+      setTargetGroupId(result.targetGroupId);
+      setViewState(result.status);
+      setMessage(result.message);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Khong the xu ly tab group luc nay.';
+      setViewState('error');
+      setMessage(errorMessage);
+    }
+  };
+
+  const moveCurrentTabToWebbotGroup = async () => {
+    if (activeTabId === null || targetGroupId === null) {
+      return;
+    }
+
+    setIsMoving(true);
+    try {
+      const successMessage = await moveTabToWebbotGroup(activeTabId, targetGroupId);
+      setViewState('in-group');
+      setMessage(successMessage);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Di chuyen tab that bai.';
+      setViewState('error');
+      setMessage(errorMessage);
+    } finally {
+      setIsMoving(false);
+    }
+  };
+
+  useEffect(() => {
+    void inspectCurrentTab();
+  }, []);
 
   return (
-    <>
-      <div>
-        <a href="https://wxt.dev" target="_blank">
-          <img src={wxtLogo} className="logo" alt="WXT logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>WXT + React</h1>
-      <Button type="primary">Ant Design Button</Button>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the WXT and React logos to learn more
-      </p>
-    </>
+    <main className="popup-root">
+      <Typography.Title level={4} className="title">
+        Webbot Tab Group
+      </Typography.Title>
+
+      {viewState === 'loading' && (
+        <div className="loading-wrap">
+          <Spin size="small" />
+          <Typography.Text>{message}</Typography.Text>
+        </div>
+      )}
+
+      {viewState === 'in-group' && (
+        <Alert
+          type="success"
+          message={message}
+          showIcon
+        />
+      )}
+
+      {viewState === 'needs-move' && (
+        <div className="action-wrap">
+          <Alert
+            type="warning"
+            message="Can di chuyen tab vao group webbot"
+            description={message}
+            showIcon
+          />
+          <Button type="primary" loading={isMoving} onClick={() => void moveCurrentTabToWebbotGroup()}>
+            Di chuyen tab hien tai vao webbot
+          </Button>
+        </div>
+      )}
+
+      {viewState === 'error' && (
+        <Alert
+          type="error"
+          message="Khong the xu ly tab group"
+          description={message}
+          showIcon
+        />
+      )}
+    </main>
   );
 }
 
