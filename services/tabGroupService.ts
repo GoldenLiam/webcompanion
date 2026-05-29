@@ -30,7 +30,7 @@ export async function inspectOrCreateWebbotGroupForCurrentTab(): Promise<Inspect
   const currentTab = tabs[0] as TabShape | undefined;
 
   if (!isActiveTabComplete(currentTab)) {
-    throw new Error('Khong tim thay tab hien tai.');
+    throw new Error('Không tìm thấy tab hiện tại.');
   }
 
   const groupInCurrentWindow = (
@@ -48,7 +48,7 @@ export async function inspectOrCreateWebbotGroupForCurrentTab(): Promise<Inspect
 
     return {
       status: 'in-group',
-      message: 'Da tao group webbot va them tab hien tai vao group.',
+      message: 'Đã tạo group webbot và thêm tab hiện tại vào group.',
       activeTabId: currentTab.id,
       targetGroupId: newGroupId,
     };
@@ -57,7 +57,7 @@ export async function inspectOrCreateWebbotGroupForCurrentTab(): Promise<Inspect
   if (currentTab.groupId === groupInCurrentWindow.id) {
     return {
       status: 'in-group',
-      message: 'Tab hien tai da nam trong group webbot.',
+      message: 'Tab hiện tại đã nằm trong group webbot.',
       activeTabId: currentTab.id,
       targetGroupId: groupInCurrentWindow.id,
     };
@@ -65,7 +65,7 @@ export async function inspectOrCreateWebbotGroupForCurrentTab(): Promise<Inspect
 
   return {
     status: 'needs-move',
-    message: 'Tab hien tai chua nam trong group webbot.',
+    message: 'Tab hiện tại chưa nằm trong group webbot.',
     activeTabId: currentTab.id,
     targetGroupId: groupInCurrentWindow.id,
   };
@@ -77,5 +77,26 @@ export async function moveTabToWebbotGroup(tabId: number, groupId: number): Prom
     tabIds: tabId,
   });
 
-  return 'Da di chuyen tab hien tai vao group webbot.';
+  return 'Đã di chuyển tab hiện tại vào group webbot.';
+}
+
+export async function isTabInWebbotGroup(tabId: number): Promise<boolean> {
+  const tab = (await browser.tabs.get(tabId)) as TabShape;
+
+  if (!isActiveTabComplete(tab)) {
+    return false;
+  }
+
+  const groupInCurrentWindow = (
+    await browser.tabGroups.query({
+      title: WEBBOT_GROUP_TITLE,
+      windowId: tab.windowId,
+    })
+  )[0];
+
+  if (!groupInCurrentWindow) {
+    return false;
+  }
+
+  return tab.groupId === groupInCurrentWindow.id;
 }

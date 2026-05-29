@@ -15,6 +15,27 @@ function App() {
   const [targetGroupId, setTargetGroupId] = useState<number | null>(null);
   const [isMoving, setIsMoving] = useState(false);
 
+  const openCurrentWindowSidePanel = async () => {
+    try {
+      if (!browser.sidePanel?.open) {
+        return false;
+      }
+
+      const currentWindow = await browser.windows.getCurrent();
+
+      if (typeof currentWindow.id !== 'number') {
+        return false;
+      }
+
+      await browser.sidePanel.open({ windowId: currentWindow.id });
+      window.close();
+      return true;
+    } catch (error) {
+      console.error('Khong the mo side panel.', error);
+      return false;
+    }
+  };
+
   const inspectCurrentTab = async () => {
     setViewState('loading');
     setMessage('Dang kiem tra tab group...');
@@ -23,6 +44,11 @@ function App() {
       const result = await inspectOrCreateWebbotGroupForCurrentTab();
       setActiveTabId(result.activeTabId);
       setTargetGroupId(result.targetGroupId);
+
+      if (result.status === 'in-group' && await openCurrentWindowSidePanel()) {
+        return;
+      }
+
       setViewState(result.status);
       setMessage(result.message);
     } catch (error) {
@@ -41,6 +67,11 @@ function App() {
     setIsMoving(true);
     try {
       const successMessage = await moveTabToWebbotGroup(activeTabId, targetGroupId);
+
+      if (await openCurrentWindowSidePanel()) {
+        return;
+      }
+
       setViewState('in-group');
       setMessage(successMessage);
     } catch (error) {
