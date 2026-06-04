@@ -367,7 +367,7 @@ async function openRelayConnection(mcpRelayUrl, protocolVersion) {
   }
 }
 const PLAYWRIGHT_GROUP_TITLE = "webbot";
-const PLAYWRIGHT_GROUP_COLOR = "green";
+const PLAYWRIGHT_GROUP_COLOR = "blue";
 const NON_DEBUGGABLE_SCHEMES = ["chrome:", "edge:", "devtools:"];
 const CONNECTED_BADGE = { text: "✓", color: "#4CAF50", title: "Connected to Playwright client" };
 function isNonDebuggableUrl(url) {

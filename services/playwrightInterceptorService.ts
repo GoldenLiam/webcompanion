@@ -2,6 +2,8 @@ declare const chrome: any;
 
 // Tên của Tab Group dùng chung giữa WXT Extension và Playwright
 const PLAYWRIGHT_GROUP_TITLE = 'webbot';
+// Màu sắc của Tab Group dùng chung giữa WXT Extension và Playwright
+const PLAYWRIGHT_GROUP_COLOR = 'blue';
 
 // Danh sách các schema URL không thể bật Debugger (chrome://, edge://, devtools://, etc.)
 const NON_DEBUGGABLE_SCHEMES = ['chrome:', 'edge:', 'devtools:'];
@@ -79,6 +81,13 @@ export function initPlaywrightInterceptor() {
             // Đưa tab mới vào group "webbot" hiện có
             await originalGroup.call(chrome.tabs, { groupId, tabIds: options.tabIds });
 
+            // Đảm bảo group hiện có cũng có màu xanh
+            try {
+              await chrome.tabGroups.update(groupId, { color: PLAYWRIGHT_GROUP_COLOR });
+            } catch (e) {
+              console.error('[Interceptor] Lỗi cập nhật màu group hiện tại:', e);
+            }
+
             // Đợi Playwright kết nối hoàn tất, sau đó gửi sự kiện cho các tab có sẵn
             setTimeout(async () => {
               try {
@@ -109,6 +118,18 @@ export function initPlaywrightInterceptor() {
           console.error('[Interceptor] Lỗi chrome.tabs.group:', error);
         }
       }
+
+      // Tạo group mới và cập nhật màu/tên
+      const groupId = await originalGroup.call(chrome.tabs, options);
+      try {
+        await chrome.tabGroups.update(groupId, {
+          title: PLAYWRIGHT_GROUP_TITLE,
+          color: PLAYWRIGHT_GROUP_COLOR,
+        });
+      } catch (error) {
+        console.error('[Interceptor] Lỗi cập nhật thông tin group mới:', error);
+      }
+      return groupId;
     }
     return originalGroup.call(chrome.tabs, options);
   };

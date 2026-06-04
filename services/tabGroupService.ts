@@ -1,4 +1,5 @@
 const WEBBOT_GROUP_TITLE = 'webbot';
+const WEBBOT_GROUP_COLOR = 'blue';
 
 type TabShape = {
   id?: number;
@@ -44,6 +45,7 @@ export async function inspectOrCreateWebbotGroupForCurrentTab(): Promise<Inspect
     const newGroupId = await browser.tabs.group({ tabIds: currentTab.id });
     await browser.tabGroups.update(newGroupId, {
       title: WEBBOT_GROUP_TITLE,
+      color: WEBBOT_GROUP_COLOR,
     });
 
     return {
