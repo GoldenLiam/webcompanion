@@ -1,9 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Avatar, Button, Input, message } from 'antd';
+import { Avatar, Button, Input, Select, message } from 'antd';
 import {
-  EditOutlined,
-  MoreOutlined,
-  CloseOutlined,
   PlusOutlined,
   AimOutlined,
   DownOutlined,
@@ -11,6 +8,7 @@ import {
   GlobalOutlined,
   SendOutlined,
 } from '@ant-design/icons';
+import { socketService } from '@/services/socketService';
 import './App.css';
 
 type Message = {
@@ -20,28 +18,7 @@ type Message = {
   content: string;
 };
 
-const initialMessages: Message[] = [
-  {
-    id: 1,
-    role: 'assistant',
-    title: 'WebCompanion',
-    content:
-      'Tôi có thể tóm tắt trang, giải thích nội dung đang mở, hoặc gợi ý bước tiếp theo ngay trong side panel.',
-  },
-  {
-    id: 2,
-    role: 'user',
-    title: 'Bạn',
-    content: 'Hãy giúp tôi hiểu nhanh trang này đang nói về gì.',
-  },
-  {
-    id: 3,
-    role: 'assistant',
-    title: 'WebCompanion',
-    content:
-      'Tôi sẽ đọc tiêu đề, các heading chính và những khối nội dung nổi bật để tạo bản tóm tắt ngắn, rồi bạn có thể mở rộng nếu cần.',
-  },
-];
+const initialMessages: Message[] = [];
 
 const suggestions = [
   'Tóm tắt trang này',
@@ -50,23 +27,6 @@ const suggestions = [
   'Đề xuất bước tiếp theo',
 ];
 
-// Custom SVGs matching Copilot style
-const SidebarIcon = () => (
-  <svg
-    width="16"
-    height="16"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    style={{ display: 'block' }}
-  >
-    <rect x="3" y="3" width="18" height="18" rx="2" />
-    <path d="M9 3v18" />
-  </svg>
-);
 
 const AISparklesIcon = () => (
   <svg
@@ -92,6 +52,11 @@ function App() {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [draft, setDraft] = useState('');
   const [isPickingElement, setIsPickingElement] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected');
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [models, setModels] = useState<any[]>([]);
+  const [selectedModelId, setSelectedModelId] = useState<string>('');
+  const [activeTool, setActiveTool] = useState<{ name: string; input?: string } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom of messages container
@@ -100,6 +65,98 @@ function App() {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
+
+  // Connect socket and listen to events
+  useEffect(() => {
+    socketService.connect();
+    setConnectionStatus(socketService.getStatus());
+
+    const unsubStatus = socketService.onStatusChange((status) => {
+      setConnectionStatus(status);
+      if (status === 'connected') {
+        socketService.getModels();
+      }
+    });
+
+    const unsubModels = socketService.onModelsList((modelsList) => {
+      setModels(modelsList);
+      if (modelsList.length > 0) {
+        setSelectedModelId((prev) => {
+          const stillExists = modelsList.some(m => m.id === prev);
+          return stillExists ? prev : modelsList[0].id;
+        });
+      } else {
+        setSelectedModelId('');
+      }
+    });
+
+    const unsubAgentEvent = socketService.onAgentEvent((payload) => {
+      console.log('[App] Received agent event:', payload);
+      if (payload.type === 'assistant_delta' && payload.delta) {
+        setMessages((prev) => {
+          const updated = [...prev];
+          const last = updated[updated.length - 1];
+          if (last && last.role === 'assistant') {
+            return [
+              ...updated.slice(0, -1),
+              {
+                ...last,
+                content: last.content + payload.delta,
+              },
+            ];
+          }
+          return prev;
+        });
+      } else if (payload.type === 'tool_start') {
+        setActiveTool({ name: payload.toolName, input: payload.inputPreview });
+      } else if (payload.type === 'tool_end' || payload.type === 'tool_error') {
+        setActiveTool(null);
+      }
+    });
+
+    const unsubCompleted = socketService.onChatCompleted((data) => {
+      setIsStreaming(false);
+      setActiveTool(null);
+      if (!data.ok && data.error) {
+        void message.error(`Gặp lỗi: ${data.error}`);
+      }
+      if (data.text) {
+        setMessages((prev) => {
+          const updated = [...prev];
+          const last = updated[updated.length - 1];
+          if (last && last.role === 'assistant') {
+            return [
+              ...updated.slice(0, -1),
+              {
+                ...last,
+                content: data.text,
+              },
+            ];
+          }
+          return prev;
+        });
+      }
+    });
+
+    const unsubFailed = socketService.onChatFailed((error) => {
+      setIsStreaming(false);
+      setActiveTool(null);
+      void message.error(`Lỗi kết nối hoặc xử lý: ${error}`);
+    });
+
+    if (socketService.getStatus() === 'connected') {
+      socketService.getModels();
+    }
+
+    return () => {
+      unsubStatus();
+      unsubModels();
+      unsubAgentEvent();
+      unsubCompleted();
+      unsubFailed();
+      socketService.disconnect();
+    };
+  }, []);
 
   // Listen for message from page content script
   useEffect(() => {
@@ -179,6 +236,12 @@ function App() {
       return;
     }
 
+    if (socketService.getStatus() !== 'connected') {
+      void message.error('Không kết nối được với máy chủ. Vui lòng kiểm tra kết nối.');
+      socketService.connect();
+      return;
+    }
+
     const timestamp = Date.now();
 
     setMessages((currentMessages) => [
@@ -193,58 +256,31 @@ function App() {
         id: timestamp + 1,
         role: 'assistant',
         title: 'WebCompanion',
-        content:
-          'Tôi đã nhận yêu cầu. Nếu bạn muốn, tôi có thể viết tiếp phần giải thích, trích ý chính hoặc tạo câu trả lời ngắn hơn.',
+        content: '', // Start empty for streaming
       },
     ]);
+
     setDraft('');
+    setIsStreaming(true);
+
+    const success = socketService.sendChat(content, selectedModelId);
+    if (!success) {
+      setIsStreaming(false);
+      void message.error('Lỗi khi gửi tin nhắn qua socket.');
+    }
   };
 
-  const handleNewChat = () => {
-    setMessages([]);
-  };
 
   return (
     <div className="copilot-sidebar">
-      {/* Header section */}
-      <header className="copilot-header">
-        <div className="header-left">
-          <Button
-            type="text"
-            icon={<SidebarIcon />}
-            className="header-btn"
-            title="Đóng sidebar"
-          />
-          <Button
-            type="text"
-            icon={<EditOutlined />}
-            className="header-btn"
-            title="Trò chuyện mới"
-            onClick={handleNewChat}
-          />
-        </div>
-        <div className="header-right">
-          <Button
-            type="text"
-            icon={<MoreOutlined />}
-            className="header-btn"
-            title="Tùy chọn khác"
-          />
-          <Button
-            type="text"
-            icon={<CloseOutlined />}
-            className="header-btn"
-            title="Đóng"
-          />
-        </div>
-      </header>
-
       {/* Main scrollable body */}
       <div className="copilot-content-scroll" ref={scrollRef}>
         {/* Welcome message */}
-        <div className="copilot-welcome">
-          <h1 className="welcome-title">Này Thắng, hôm nay bạn đang nghĩ gì thế?</h1>
-        </div>
+        {messages.length === 0 && (
+          <div className="copilot-welcome">
+            <h1 className="welcome-title">Mình đã sẵn sàng hỗ trợ</h1>
+          </div>
+        )}
 
         {/* Message streams */}
         <div className="copilot-chat-stream">
@@ -260,15 +296,55 @@ function App() {
                 {message.role === 'assistant' && (
                   <div className="copilot-msg-sender">{message.title}</div>
                 )}
-                <div className="copilot-msg-text">{message.content}</div>
+                {message.content === '' && isStreaming && message.id === messages[messages.length - 1]?.id ? (
+                  <div className="typing-indicator">
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                ) : (
+                  <div className="copilot-msg-text">{message.content}</div>
+                )}
               </div>
             </div>
           ))}
         </div>
+        
+        {/* Active Tool Running status */}
+        {isStreaming && activeTool && (
+          <div className="copilot-tool-banner">
+            <span className="copilot-tool-pulse" />
+            <span>Đang sử dụng công cụ: <strong>{activeTool.name}</strong>...</span>
+          </div>
+        )}
       </div>
 
       {/* Footer input and actions */}
       <footer className="copilot-footer">
+        {/* Connection status banner if not connected */}
+        {connectionStatus !== 'connected' && (
+          <div className={`copilot-status-banner ${connectionStatus}`}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span className="status-dot-indicator" />
+              <span>
+                {connectionStatus === 'connecting'
+                  ? 'Đang kết nối tới máy chủ agent...'
+                  : 'Mất kết nối tới máy chủ agent. Đang tự động thử lại...'}
+              </span>
+            </div>
+            {connectionStatus === 'disconnected' && (
+              <Button
+                size="small"
+                type="text"
+                onClick={() => socketService.connect()}
+                style={{ color: '#2563eb', fontWeight: 600, padding: 0, height: 'auto', fontSize: '11px' }}
+              >
+                Thử lại
+              </Button>
+            )}
+          </div>
+        )}
+
         {/* Suggestion row */}
         {suggestions.length > 0 && (
           <div className="copilot-suggestions">
@@ -292,6 +368,7 @@ function App() {
             </span>
             <span className="context-title">AI ChatHub - Microsoft Edge Addons</span>
             <span className="context-extra">+4 tab</span>
+            <span className={`socket-dot ${connectionStatus}`} title={`Socket: ${connectionStatus}`} />
           </div>
           <UpOutlined className="context-expand-icon" />
         </div>
@@ -321,7 +398,7 @@ function App() {
               }
             }}
             placeholder="Nhắn tin cho Copilot hoặc @ đề cập đến một tab"
-            autoSize={{ minRows: 1, maxRows: 5 }}
+            autoSize={{ minRows: 2, maxRows: 6 }}
             className="copilot-input"
           />
           <div className="copilot-composer-actions">
@@ -333,10 +410,15 @@ function App() {
                 className="composer-action-btn"
                 title="Đính kèm tệp"
               />
-              <div className="copilot-mode-selector">
-                <span>Smart</span>
-                <DownOutlined style={{ fontSize: '9px' }} />
-              </div>
+              <Select
+                value={selectedModelId || undefined}
+                onChange={(val) => setSelectedModelId(val)}
+                placeholder="Chọn Model"
+                className="copilot-model-select"
+                variant="borderless"
+                options={models.map((m) => ({ value: m.id, label: m.modelName || m.model || m.id }))}
+                dropdownStyle={{ zIndex: 2147483647 }}
+              />
             </div>
             <div className="actions-right">
               {draft.trim() ? (
