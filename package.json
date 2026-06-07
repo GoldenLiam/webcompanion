@@ -16,6 +16,12 @@
   },
   "dependencies": {
     "@ant-design/icons": "^6.2.5",
+    "@tiptap/core": "^3.26.0",
+    "@tiptap/extension-mention": "^3.26.0",
+    "@tiptap/extension-placeholder": "^3.26.0",
+    "@tiptap/pm": "^3.26.0",
+    "@tiptap/react": "^3.26.0",
+    "@tiptap/starter-kit": "^3.26.0",
     "antd": "^6.4.3",
     "markdown-it": "^14.2.0",
     "react": "^19.2.4",

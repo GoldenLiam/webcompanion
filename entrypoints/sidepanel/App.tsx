@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Avatar, Button, Input, Select, Dropdown, message } from 'antd';
+import { Avatar, Button, Select, Dropdown, message } from 'antd';
 import type { MenuProps } from 'antd';
 import {
   PlusOutlined,
@@ -14,6 +14,7 @@ import {
 } from '@ant-design/icons';
 import { socketService } from '@/services/socketService';
 import MarkdownIt from 'markdown-it';
+import { RichComposer, RichComposerRef } from '../../components/RichComposer';
 import './App.css';
 
 const md = new MarkdownIt({
@@ -22,11 +23,43 @@ const md = new MarkdownIt({
   typographer: true,
 });
 
+const renderMessageContent = (content: string) => {
+  let html = md.render(content);
+  // Replace Tab format
+  html = html.replace(
+    /\[Tab đính kèm: &quot;([^&]+)&quot; \| Link: ([^\]]+)\]/g,
+    '<span class="mention-tab-pill readonly">@$1</span>'
+  );
+  html = html.replace(
+    /\[Tab đính kèm: "([^"]+)" \| Link: ([^\]]+)\]/g,
+    '<span class="mention-tab-pill readonly">@$1</span>'
+  );
+  // Replace Element format
+  html = html.replace(
+    /\[Phần tử được chọn \| Selector: &quot;([^&]+)&quot; \| Nội dung chữ: &quot;([^\]]*)&quot;\]/g,
+    '<span class="mention-element-pill readonly">#$1</span>'
+  );
+  html = html.replace(
+    /\[Phần tử được chọn \| Selector: "([^"]+)" \| Nội dung chữ: "([^\]]*)"\]/g,
+    '<span class="mention-element-pill readonly">#$1</span>'
+  );
+  return html;
+};
+
+type Attachment = {
+  type: 'element' | 'tab';
+  id: string;
+  title: string;
+  value: string;
+  extraText?: string;
+};
+
 type Message = {
   id: number;
   role: 'assistant' | 'user';
   title: string;
   content: string;
+  attachments?: Attachment[];
   toolCalls?: {
     name: string;
     input?: string;
@@ -131,7 +164,6 @@ const ToolCallItem = ({ toolCall }: { toolCall: NonNullable<Message['toolCalls']
 
 function App() {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
-  const [draft, setDraft] = useState('');
   const [isPickingElement, setIsPickingElement] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected');
   const [isStreaming, setIsStreaming] = useState(false);
@@ -145,6 +177,9 @@ function App() {
   const [currentTab, setCurrentTab] = useState<any | null>(null);
   const [isContextExpanded, setIsContextExpanded] = useState(false);
 
+  const composerRef = useRef<RichComposerRef>(null);
+  const [isComposerEmpty, setIsComposerEmpty] = useState(true);
+
   const handleActivateTab = async (tabId: number | undefined) => {
     if (typeof tabId !== 'number') return;
     try {
@@ -155,12 +190,14 @@ function App() {
   };
 
   const handlePinTab = (tab: any) => {
-    const tabRef = `[${tab.title}](${tab.url})`;
-    setDraft((prev) => {
-      const prefix = prev ? `${prev} ` : '';
-      return `${prefix}${tabRef}`;
-    });
-    void message.success(`Đã ghim tab: ${tab.title}`);
+    if (composerRef.current) {
+      composerRef.current.insertTab({
+        id: tab.id || Date.now(),
+        title: tab.title || 'Tab',
+        url: tab.url,
+      });
+      void message.success(`Đã đính kèm tab: ${tab.title}`);
+    }
   };
 
   useEffect(() => {
@@ -219,11 +256,10 @@ function App() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setDraft((prev) => {
-        const prefix = prev ? `${prev}\n` : '';
-        return `${prefix}[Tải lên file: "${file.name}"]`;
-      });
-      void message.success(`Đã tải lên file: ${file.name}`);
+      if (composerRef.current) {
+        composerRef.current.insertText(`[Tải lên file: "${file.name}"]`);
+        void message.success(`Đã tải lên file: ${file.name}`);
+      }
       e.target.value = '';
     }
   };
@@ -472,14 +508,16 @@ function App() {
       if (msg.type === 'ELEMENT_PICKED_RESULT') {
         setIsPickingElement(false);
         const { selector, text } = msg;
-        if (text) {
-          setDraft((prev) => {
-            const prefix = prev ? `${prev}\n` : '';
-            return `${prefix}[Trích dẫn: "${text}" | Selector: ${selector}]`;
-          });
-          void message.success('Đã chọn phần tử thành công!');
+        if (selector) {
+          if (composerRef.current) {
+            composerRef.current.insertElement({
+              selector,
+              text: text || '',
+            });
+            void message.success('Đã đính kèm phần tử thành công!');
+          }
         } else {
-          void message.warning('Phần tử được chọn không có nội dung chữ.');
+          void message.warning('Không lấy được selector của phần tử.');
         }
       } else if (msg.type === 'ELEMENT_PICKED_CANCEL') {
         setIsPickingElement(false);
@@ -548,8 +586,8 @@ function App() {
     }
   };
 
-  const sendMessage = (text: string) => {
-    const content = text.trim();
+  const sendMessage = (finalPrompt: string) => {
+    const content = finalPrompt.trim();
 
     if (!content) {
       return;
@@ -579,7 +617,10 @@ function App() {
       },
     ]);
 
-    setDraft('');
+    if (composerRef.current) {
+      composerRef.current.clear();
+    }
+    setIsComposerEmpty(true);
     setIsStreaming(true);
 
     const success = socketService.sendChat(content, selectedModelId);
@@ -630,6 +671,18 @@ function App() {
                 {message.role === 'assistant' && (
                   <div className="webcompanion-msg-sender">{message.title}</div>
                 )}
+                {message.role === 'user' && message.attachments && message.attachments.length > 0 && (
+                  <div className="webcompanion-message-bubble-attachments">
+                    {message.attachments.map((att) => (
+                      <div key={att.id} className={`webcompanion-attachment-pill ${att.type} readonly`}>
+                        <span className="attachment-icon">
+                          {att.type === 'tab' ? <GlobalOutlined /> : <AimOutlined />}
+                        </span>
+                        <span className="attachment-title" title={att.title}>{att.title}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {message.toolCalls && message.toolCalls.length > 0 && (
                   <div className="webcompanion-message-tool-calls">
                     {message.toolCalls.map((tc, idx) => (
@@ -646,7 +699,7 @@ function App() {
                 ) : (
                   <div
                     className="webcompanion-msg-text"
-                    dangerouslySetInnerHTML={{ __html: md.render(message.content) }}
+                    dangerouslySetInnerHTML={{ __html: renderMessageContent(message.content) }}
                   />
                 )}
               </div>
@@ -779,18 +832,15 @@ function App() {
           </div>
         )}
         <div className="webcompanion-composer">
-          <Input.TextArea
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage(draft);
+          <RichComposer
+            ref={composerRef}
+            tabsList={tabsList}
+            onSubmit={sendMessage}
+            onTextChange={() => {
+              if (composerRef.current) {
+                setIsComposerEmpty(composerRef.current.isEmpty());
               }
             }}
-            placeholder="Nhắn tin cho WebCompanion hoặc @ đề cập đến một tab"
-            autoSize={{ minRows: 2, maxRows: 6 }}
-            className="webcompanion-input"
           />
           <div className="webcompanion-composer-actions">
             <div className="actions-left">
@@ -823,10 +873,17 @@ function App() {
                 type="text"
                 shape="circle"
                 icon={<SendOutlined />}
-                className={`composer-action-btn send ${draft.trim() ? 'active' : ''}`}
+                className={`composer-action-btn send ${!isComposerEmpty ? 'active' : ''}`}
                 title="Gửi tin nhắn"
-                disabled={!draft.trim()}
-                onClick={() => sendMessage(draft)}
+                disabled={isComposerEmpty}
+                onClick={() => {
+                  if (composerRef.current) {
+                    const prompt = composerRef.current.getFinalPrompt();
+                    if (prompt.trim()) {
+                      sendMessage(prompt);
+                    }
+                  }
+                }}
               />
             </div>
           </div>
