@@ -17,6 +17,7 @@ export type ModelsListener = (models: ModelSetting[]) => void;
 export type AgentEventListener = (payload: AgentEventPayload) => void;
 export type ChatCompletedListener = (data: { text: string; ok: boolean; error?: string }) => void;
 export type ChatFailedListener = (error: string) => void;
+export type ChatHistoryListener = (messages: any[]) => void;
 
 class SocketService {
   private socket: WebSocket | null = null;
@@ -24,6 +25,7 @@ class SocketService {
   private url: string = 'ws://localhost:8080';
   private reconnectTimer: any = null;
   private autoReconnect: boolean = true;
+  private conversationId: string = 'extension_companion';
 
   // Listeners
   private statusListeners = new Set<StatusListener>();
@@ -31,6 +33,7 @@ class SocketService {
   private agentEventListeners = new Set<AgentEventListener>();
   private chatCompletedListeners = new Set<ChatCompletedListener>();
   private chatFailedListeners = new Set<ChatFailedListener>();
+  private chatHistoryListeners = new Set<ChatHistoryListener>();
 
   constructor(url?: string) {
     if (url) {
@@ -132,6 +135,20 @@ class SocketService {
     switch (data.type) {
       case 'connection_status':
         console.log('[SocketService] Connection status check:', data.message);
+        if (data.conversationId) {
+          this.conversationId = data.conversationId;
+        }
+        break;
+      case 'session_reset':
+        console.log('[SocketService] Session reset:', data.message);
+        if (data.conversationId) {
+          this.conversationId = data.conversationId;
+          // Clear UI messages by passing empty history
+          this.chatHistoryListeners.forEach((listener) => listener([]));
+        }
+        break;
+      case 'chat_history':
+        this.chatHistoryListeners.forEach((listener) => listener(data.messages || []));
         break;
       case 'models_list':
         this.modelsListeners.forEach((listener) => listener(data.models || []));
@@ -159,7 +176,7 @@ class SocketService {
     }
   }
 
-  public sendChat(text: string, modelId?: string, conversationId: string = 'extension_companion') {
+  public sendChat(text: string, modelId?: string) {
     if (!this.socket) {
       console.error('[SocketService] Cannot send chat: WebSocket is null.');
       return false;
@@ -175,13 +192,27 @@ class SocketService {
         type: 'chat',
         text,
         modelId,
-        conversationId,
+        conversationId: this.conversationId,
       };
       console.log('[SocketService] Sending chat payload:', payload);
       this.socket.send(JSON.stringify(payload));
       return true;
     } catch (err) {
       console.error('[SocketService] Send exception:', err);
+      return false;
+    }
+  }
+
+  public sendReset() {
+    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+      return false;
+    }
+    try {
+      console.log('[SocketService] Sending reset request...');
+      this.socket.send(JSON.stringify({ type: 'reset' }));
+      return true;
+    } catch (err) {
+      console.error('[SocketService] Send reset exception:', err);
       return false;
     }
   }
@@ -218,6 +249,11 @@ class SocketService {
   public onChatFailed(listener: ChatFailedListener) {
     this.chatFailedListeners.add(listener);
     return () => this.chatFailedListeners.delete(listener);
+  }
+
+  public onChatHistory(listener: ChatHistoryListener) {
+    this.chatHistoryListeners.add(listener);
+    return () => this.chatHistoryListeners.delete(listener);
   }
 }
 

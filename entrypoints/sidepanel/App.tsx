@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Avatar, Button, Input, Select, message } from 'antd';
+import { Avatar, Button, Input, Select, Dropdown, message } from 'antd';
+import type { MenuProps } from 'antd';
 import {
   PlusOutlined,
   AimOutlined,
@@ -7,6 +8,8 @@ import {
   UpOutlined,
   GlobalOutlined,
   SendOutlined,
+  UploadOutlined,
+  FormOutlined,
 } from '@ant-design/icons';
 import { socketService } from '@/services/socketService';
 import './App.css';
@@ -58,6 +61,47 @@ function App() {
   const [selectedModelId, setSelectedModelId] = useState<string>('');
   const [activeTool, setActiveTool] = useState<{ name: string; input?: string } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setDraft((prev) => {
+        const prefix = prev ? `${prev}\n` : '';
+        return `${prefix}[Tải lên file: "${file.name}"]`;
+      });
+      void message.success(`Đã tải lên file: ${file.name}`);
+      e.target.value = '';
+    }
+  };
+
+  const handleMenuClick: MenuProps['onClick'] = (info) => {
+    if (info.key === 'picker') {
+      handleStartPicker();
+    } else if (info.key === 'upload') {
+      fileInputRef.current?.click();
+    } else if (info.key === 'reset') {
+      handleReset();
+    }
+  };
+
+  const menuItems: MenuProps['items'] = [
+    {
+      key: 'picker',
+      label: 'Chọn phần tử',
+      icon: <AimOutlined />,
+    },
+    {
+      key: 'upload',
+      label: 'Tải lên file',
+      icon: <UploadOutlined />,
+    },
+    {
+      key: 'reset',
+      label: 'Đoạn chat mới',
+      icon: <FormOutlined />,
+    },
+  ];
 
   // Auto-scroll to bottom of messages container
   useEffect(() => {
@@ -144,6 +188,17 @@ function App() {
       void message.error(`Lỗi kết nối hoặc xử lý: ${error}`);
     });
 
+    const unsubHistory = socketService.onChatHistory((historyMessages) => {
+      console.log('[App] Received chat history:', historyMessages);
+      const mapped = historyMessages.map((msg: any) => ({
+        id: msg.id || Date.now() + Math.random(),
+        role: msg.role as 'assistant' | 'user',
+        title: msg.role === 'user' ? 'Bạn' : 'WebCompanion',
+        content: msg.text || '',
+      }));
+      setMessages(mapped);
+    });
+
     if (socketService.getStatus() === 'connected') {
       socketService.getModels();
     }
@@ -154,6 +209,7 @@ function App() {
       unsubAgentEvent();
       unsubCompleted();
       unsubFailed();
+      unsubHistory();
       socketService.disconnect();
     };
   }, []);
@@ -229,6 +285,17 @@ function App() {
     }
   };
 
+  const handleReset = () => {
+    setIsStreaming(false);
+    setActiveTool(null);
+    const success = socketService.sendReset();
+    if (success) {
+      void message.success('Đã tạo phiên trò chuyện mới.');
+    } else {
+      void message.error('Không thể tạo phiên mới. Vui lòng kiểm tra kết nối.');
+    }
+  };
+
   const sendMessage = (text: string) => {
     const content = text.trim();
 
@@ -273,6 +340,12 @@ function App() {
 
   return (
     <div className="copilot-sidebar">
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        style={{ display: 'none' }}
+      />
       {/* Main scrollable body */}
       <div className="copilot-content-scroll" ref={scrollRef}>
         {/* Welcome message */}
@@ -403,13 +476,20 @@ function App() {
           />
           <div className="copilot-composer-actions">
             <div className="actions-left">
-              <Button
-                type="text"
-                shape="circle"
-                icon={<PlusOutlined />}
-                className="composer-action-btn"
-                title="Đính kèm tệp"
-              />
+              <Dropdown
+                menu={{ items: menuItems, onClick: handleMenuClick }}
+                trigger={['click']}
+                placement="topLeft"
+                getPopupContainer={(triggerNode) => triggerNode.parentNode as HTMLElement}
+              >
+                <Button
+                  type="text"
+                  shape="circle"
+                  icon={<PlusOutlined />}
+                  className="composer-action-btn"
+                  title="Thêm hành động"
+                />
+              </Dropdown>
               <Select
                 value={selectedModelId || undefined}
                 onChange={(val) => setSelectedModelId(val)}
@@ -421,25 +501,15 @@ function App() {
               />
             </div>
             <div className="actions-right">
-              {draft.trim() ? (
-                <Button
-                  type="text"
-                  shape="circle"
-                  icon={<SendOutlined />}
-                  className="composer-action-btn send"
-                  title="Gửi tin nhắn"
-                  onClick={() => sendMessage(draft)}
-                />
-              ) : (
-                <Button
-                  type="text"
-                  shape="circle"
-                  icon={<AimOutlined />}
-                  className={`composer-action-btn picker ${isPickingElement ? 'active' : ''}`}
-                  title="Chọn phần tử trên trang"
-                  onClick={handleStartPicker}
-                />
-              )}
+              <Button
+                type="text"
+                shape="circle"
+                icon={<SendOutlined />}
+                className={`composer-action-btn send ${draft.trim() ? 'active' : ''}`}
+                title="Gửi tin nhắn"
+                disabled={!draft.trim()}
+                onClick={() => sendMessage(draft)}
+              />
             </div>
           </div>
         </div>

@@ -340,6 +340,13 @@
 .composer-action-btn.send:hover {
   background-color: rgba(37, 99, 235, 0.08) !important;
 }
+.composer-action-btn.send:disabled,
+.composer-action-btn.send:disabled:hover {
+  color: #bfbfbf !important;
+  background-color: transparent !important;
+  cursor: not-allowed !important;
+  opacity: 0.6;
+}
 
 .copilot-model-select.ant-select {
   font-size: 11.5px !important;
