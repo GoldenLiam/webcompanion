@@ -19,6 +19,13 @@ type Message = {
   role: 'assistant' | 'user';
   title: string;
   content: string;
+  toolCalls?: {
+    name: string;
+    input?: string;
+    status: 'running' | 'completed' | 'error';
+    output?: string;
+    error?: string;
+  }[];
 };
 
 const initialMessages: Message[] = [];
@@ -50,6 +57,69 @@ const AISparklesIcon = () => (
     />
   </svg>
 );
+
+const ToolCallItem = ({ toolCall }: { toolCall: NonNullable<Message['toolCalls']>[number] }) => {
+  const [expanded, setExpanded] = useState(false);
+
+  const getStatusIcon = () => {
+    switch (toolCall.status) {
+      case 'running':
+        return <span className="tool-status-dot running" />;
+      case 'completed':
+        return <span className="tool-status-dot completed">✓</span>;
+      case 'error':
+        return <span className="tool-status-dot error">✗</span>;
+    }
+  };
+
+  const getStatusText = () => {
+    switch (toolCall.status) {
+      case 'running':
+        return 'Đang gọi...';
+      case 'completed':
+        return 'Hoàn thành';
+      case 'error':
+        return 'Gặp lỗi';
+    }
+  };
+
+  return (
+    <div className={`tool-call-item ${toolCall.status}`}>
+      <div className="tool-call-header" onClick={() => setExpanded(!expanded)}>
+        <div className="tool-call-header-left">
+          {getStatusIcon()}
+          <span className="tool-name">{toolCall.name}</span>
+        </div>
+        <div className="tool-call-header-right">
+          <span className="tool-status-text">{getStatusText()}</span>
+          {expanded ? <UpOutlined style={{ fontSize: '10px' }} /> : <DownOutlined style={{ fontSize: '10px' }} />}
+        </div>
+      </div>
+      {expanded && (
+        <div className="tool-call-details">
+          {toolCall.input && (
+            <div className="tool-detail-section">
+              <div className="tool-detail-label">Tham số đầu vào:</div>
+              <pre className="tool-detail-code">{toolCall.input}</pre>
+            </div>
+          )}
+          {toolCall.status === 'completed' && toolCall.output && (
+            <div className="tool-detail-section">
+              <div className="tool-detail-label">Kết quả trả về:</div>
+              <pre className="tool-detail-code">{toolCall.output}</pre>
+            </div>
+          )}
+          {toolCall.status === 'error' && toolCall.error && (
+            <div className="tool-detail-section error">
+              <div className="tool-detail-label">Chi tiết lỗi:</div>
+              <pre className="tool-detail-code">{toolCall.error}</pre>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 function App() {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
@@ -153,8 +223,82 @@ function App() {
         });
       } else if (payload.type === 'tool_start') {
         setActiveTool({ name: payload.toolName, input: payload.inputPreview });
-      } else if (payload.type === 'tool_end' || payload.type === 'tool_error') {
+        setMessages((prev) => {
+          const updated = [...prev];
+          const last = updated[updated.length - 1];
+          if (last && last.role === 'assistant') {
+            const currentTools = last.toolCalls || [];
+            const exists = currentTools.some(t => t.name === payload.toolName && t.status === 'running');
+            if (exists) return prev;
+            return [
+              ...updated.slice(0, -1),
+              {
+                ...last,
+                toolCalls: [
+                  ...currentTools,
+                  {
+                    name: payload.toolName,
+                    input: payload.inputPreview,
+                    status: 'running',
+                  },
+                ],
+              },
+            ];
+          }
+          return prev;
+        });
+      } else if (payload.type === 'tool_end') {
         setActiveTool(null);
+        setMessages((prev) => {
+          const updated = [...prev];
+          const last = updated[updated.length - 1];
+          if (last && last.role === 'assistant' && last.toolCalls) {
+            const updatedTools = last.toolCalls.map((t) => {
+              if (t.name === payload.toolName && t.status === 'running') {
+                return {
+                  ...t,
+                  status: 'completed' as const,
+                  output: payload.outputPreview,
+                };
+              }
+              return t;
+            });
+            return [
+              ...updated.slice(0, -1),
+              {
+                ...last,
+                toolCalls: updatedTools,
+              },
+            ];
+          }
+          return prev;
+        });
+      } else if (payload.type === 'tool_error') {
+        setActiveTool(null);
+        setMessages((prev) => {
+          const updated = [...prev];
+          const last = updated[updated.length - 1];
+          if (last && last.role === 'assistant' && last.toolCalls) {
+            const updatedTools = last.toolCalls.map((t) => {
+              if (t.name === payload.toolName && t.status === 'running') {
+                return {
+                  ...t,
+                  status: 'error' as const,
+                  error: payload.error,
+                };
+              }
+              return t;
+            });
+            return [
+              ...updated.slice(0, -1),
+              {
+                ...last,
+                toolCalls: updatedTools,
+              },
+            ];
+          }
+          return prev;
+        });
       }
     });
 
@@ -164,28 +308,53 @@ function App() {
       if (!data.ok && data.error) {
         void message.error(`Gặp lỗi: ${data.error}`);
       }
-      if (data.text) {
-        setMessages((prev) => {
-          const updated = [...prev];
-          const last = updated[updated.length - 1];
-          if (last && last.role === 'assistant') {
-            return [
-              ...updated.slice(0, -1),
-              {
-                ...last,
-                content: data.text,
-              },
-            ];
-          }
-          return prev;
-        });
-      }
+      setMessages((prev) => {
+        const updated = [...prev];
+        const last = updated[updated.length - 1];
+        if (last && last.role === 'assistant') {
+          const updatedTools = last.toolCalls?.map((t) => {
+            if (t.status === 'running') {
+              return { ...t, status: 'completed' as const };
+            }
+            return t;
+          });
+          return [
+            ...updated.slice(0, -1),
+            {
+              ...last,
+              content: data.text || last.content,
+              toolCalls: updatedTools,
+            },
+          ];
+        }
+        return prev;
+      });
     });
 
     const unsubFailed = socketService.onChatFailed((error) => {
       setIsStreaming(false);
       setActiveTool(null);
       void message.error(`Lỗi kết nối hoặc xử lý: ${error}`);
+      setMessages((prev) => {
+        const updated = [...prev];
+        const last = updated[updated.length - 1];
+        if (last && last.role === 'assistant') {
+          const updatedTools = last.toolCalls?.map((t) => {
+            if (t.status === 'running') {
+              return { ...t, status: 'error' as const, error };
+            }
+            return t;
+          });
+          return [
+            ...updated.slice(0, -1),
+            {
+              ...last,
+              toolCalls: updatedTools,
+            },
+          ];
+        }
+        return prev;
+      });
     });
 
     const unsubHistory = socketService.onChatHistory((historyMessages) => {
@@ -339,7 +508,7 @@ function App() {
 
 
   return (
-    <div className="copilot-sidebar">
+    <div className="webcompanion-sidebar">
       <input
         type="file"
         ref={fileInputRef}
@@ -347,27 +516,34 @@ function App() {
         style={{ display: 'none' }}
       />
       {/* Main scrollable body */}
-      <div className="copilot-content-scroll" ref={scrollRef}>
+      <div className="webcompanion-content-scroll" ref={scrollRef}>
         {/* Welcome message */}
         {messages.length === 0 && (
-          <div className="copilot-welcome">
+          <div className="webcompanion-welcome">
             <h1 className="welcome-title">Mình đã sẵn sàng hỗ trợ</h1>
           </div>
         )}
 
         {/* Message streams */}
-        <div className="copilot-chat-stream">
+        <div className="webcompanion-chat-stream">
           {messages.map((message) => (
-            <div key={message.id} className={`copilot-msg-row ${message.role}`}>
+            <div key={message.id} className={`webcompanion-msg-row ${message.role}`}>
               {message.role === 'assistant' && (
                 <Avatar
-                  className="copilot-avatar"
+                  className="webcompanion-avatar"
                   icon={<AISparklesIcon />}
                 />
               )}
-              <div className="copilot-msg-bubble">
+              <div className="webcompanion-msg-bubble">
                 {message.role === 'assistant' && (
-                  <div className="copilot-msg-sender">{message.title}</div>
+                  <div className="webcompanion-msg-sender">{message.title}</div>
+                )}
+                {message.toolCalls && message.toolCalls.length > 0 && (
+                  <div className="webcompanion-message-tool-calls">
+                    {message.toolCalls.map((tc, idx) => (
+                      <ToolCallItem key={idx} toolCall={tc} />
+                    ))}
+                  </div>
                 )}
                 {message.content === '' && isStreaming && message.id === messages[messages.length - 1]?.id ? (
                   <div className="typing-indicator">
@@ -376,7 +552,7 @@ function App() {
                     <span />
                   </div>
                 ) : (
-                  <div className="copilot-msg-text">{message.content}</div>
+                  <div className="webcompanion-msg-text">{message.content}</div>
                 )}
               </div>
             </div>
@@ -385,18 +561,18 @@ function App() {
         
         {/* Active Tool Running status */}
         {isStreaming && activeTool && (
-          <div className="copilot-tool-banner">
-            <span className="copilot-tool-pulse" />
+          <div className="webcompanion-tool-banner">
+            <span className="webcompanion-tool-pulse" />
             <span>Đang sử dụng công cụ: <strong>{activeTool.name}</strong>...</span>
           </div>
         )}
       </div>
 
       {/* Footer input and actions */}
-      <footer className="copilot-footer">
+      <footer className="webcompanion-footer">
         {/* Connection status banner if not connected */}
         {connectionStatus !== 'connected' && (
-          <div className={`copilot-status-banner ${connectionStatus}`}>
+          <div className={`webcompanion-status-banner ${connectionStatus}`}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span className="status-dot-indicator" />
               <span>
@@ -420,11 +596,11 @@ function App() {
 
         {/* Suggestion row */}
         {suggestions.length > 0 && (
-          <div className="copilot-suggestions">
+          <div className="webcompanion-suggestions">
             {suggestions.map((item) => (
               <button
                 key={item}
-                className="copilot-suggestion-chip"
+                className="webcompanion-suggestion-chip"
                 onClick={() => sendMessage(item)}
               >
                 {item}
@@ -434,7 +610,7 @@ function App() {
         )}
 
         {/* Current Active Context Tab Bar */}
-        <div className="copilot-context-capsule">
+        <div className="webcompanion-context-capsule">
           <div className="context-left">
             <span className="context-icon-wrapper">
               <GlobalOutlined style={{ color: '#2563eb' }} />
@@ -448,7 +624,7 @@ function App() {
 
         {/* Composer Chat Input area */}
         {isPickingElement && (
-          <div className="copilot-picker-banner">
+          <div className="webcompanion-picker-banner">
             <span>Đang chọn phần tử trên trang...</span>
             <Button
               size="small"
@@ -460,7 +636,7 @@ function App() {
             </Button>
           </div>
         )}
-        <div className="copilot-composer">
+        <div className="webcompanion-composer">
           <Input.TextArea
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
@@ -470,11 +646,11 @@ function App() {
                 sendMessage(draft);
               }
             }}
-            placeholder="Nhắn tin cho Copilot hoặc @ đề cập đến một tab"
+            placeholder="Nhắn tin cho WebCompanion hoặc @ đề cập đến một tab"
             autoSize={{ minRows: 2, maxRows: 6 }}
-            className="copilot-input"
+            className="webcompanion-input"
           />
-          <div className="copilot-composer-actions">
+          <div className="webcompanion-composer-actions">
             <div className="actions-left">
               <Dropdown
                 menu={{ items: menuItems, onClick: handleMenuClick }}
@@ -494,7 +670,7 @@ function App() {
                 value={selectedModelId || undefined}
                 onChange={(val) => setSelectedModelId(val)}
                 placeholder="Chọn Model"
-                className="copilot-model-select"
+                className="webcompanion-model-select"
                 variant="borderless"
                 options={models.map((m) => ({ value: m.id, label: m.modelName || m.model || m.id }))}
                 dropdownStyle={{ zIndex: 2147483647 }}

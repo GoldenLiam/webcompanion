@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import './App.css';
 import { Alert, Button, Spin, Typography } from 'antd';
+import { MessageOutlined } from '@ant-design/icons';
 import {
   inspectOrCreateWebbotGroupForCurrentTab,
   moveTabToWebbotGroup,
@@ -102,11 +103,16 @@ function App() {
       )}
 
       {viewState === 'in-group' && (
-        <Alert
-          type="success"
-          message={message}
-          showIcon
-        />
+        <div className="action-wrap">
+          <Alert
+            type="success"
+            message={message}
+            showIcon
+          />
+          <Button type="primary" icon={<MessageOutlined />} onClick={() => void openCurrentWindowSidePanel()}>
+            Mở Chat
+          </Button>
+        </div>
       )}
 
       {viewState === 'needs-move' && (
