@@ -34,7 +34,21 @@ async function autoConnectToPlaywright() {
     const tabsResponse = await browser.runtime.sendMessage({ type: "getTabs" });
     
     if (tabsResponse.success && tabsResponse.tabs && tabsResponse.tabs.length > 0) {
-      const targetTab = tabsResponse.tabs[0]; 
+      // Ưu tiên chọn tab đang nằm trong group "webbot" thay vì lấy tabs[0] mù quáng.
+      // Nếu không tìm thấy tab nào trong group, fallback về tab đầu tiên.
+      let targetTab = tabsResponse.tabs[0];
+      try {
+        const groups = await browser.tabGroups.query({ title: "webbot" });
+        if (groups.length > 0) {
+          const webbotGroupId = groups[0].id;
+          const groupTab = tabsResponse.tabs.find((t: any) => t.groupId === webbotGroupId);
+          if (groupTab) {
+            targetTab = groupTab;
+          }
+        }
+      } catch (e) {
+        console.warn("Không thể truy vấn group webbot, sử dụng tab mặc định:", e);
+      }
 
       const finalResponse = await browser.runtime.sendMessage({
         type: "connectToTab",

@@ -776,11 +776,12 @@
 .webcompanion-msg-text p {
   margin: 0 0 8px 0;
 }
+
 .webcompanion-msg-text p:last-child {
   margin-bottom: 0;
 }
 
-.webcompanion-msg-text ul, 
+.webcompanion-msg-text ul,
 .webcompanion-msg-text ol {
   margin: 0 0 8px 0;
   padding-left: 20px;
@@ -830,9 +831,18 @@
   font-weight: 600;
   color: #1a1a1a;
 }
-.webcompanion-msg-text h1 { font-size: 1.4em; }
-.webcompanion-msg-text h2 { font-size: 1.25em; }
-.webcompanion-msg-text h3 { font-size: 1.1em; }
+
+.webcompanion-msg-text h1 {
+  font-size: 1.4em;
+}
+
+.webcompanion-msg-text h2 {
+  font-size: 1.25em;
+}
+
+.webcompanion-msg-text h3 {
+  font-size: 1.1em;
+}
 
 /* Composer attachments */
 .webcompanion-composer-attachments {
@@ -855,7 +865,8 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background-color: #e0f2fe; /* Light blue */
+  background-color: #e0f2fe;
+  /* Light blue */
   border: 1px solid #bae6fd;
   border-radius: 12px;
   padding: 3px 8px;
@@ -867,7 +878,8 @@
 }
 
 .webcompanion-attachment-pill.element {
-  background-color: #fef3c7; /* Light yellow/amber */
+  background-color: #fef3c7;
+  /* Light yellow/amber */
   border-color: #fde68a;
   color: #b45309;
 }
@@ -917,8 +929,8 @@
 }
 
 .webcompanion-rich-input {
-  min-height: 44px;
-  max-height: 140px;
+  min-height: 8vh;
+  max-height: 15vh;
   overflow-y: auto;
   font-size: 14px;
   line-height: 1.5;
@@ -949,7 +961,8 @@
 
 /* Styled inline mention pills in editor */
 .mention-tab-pill {
-  background-color: #e0f2fe !important; /* light blue */
+  background-color: #e0f2fe !important;
+  /* light blue */
   border: 1px solid #bae6fd !important;
   color: #0369a1 !important;
   padding: 1px 6px !important;
@@ -965,7 +978,8 @@
 }
 
 .mention-element-pill {
-  background-color: #fef3c7 !important; /* light amber */
+  background-color: #fef3c7 !important;
+  /* light amber */
   border: 1px solid #fde68a !important;
   color: #b45309 !important;
   padding: 1px 6px !important;

@@ -65,8 +65,12 @@ export function initPlaywrightInterceptor() {
       const firstTabId = tabIds[0];
 
       if (typeof firstTabId === 'number') {
-        // Lưu lại tab đầu tiên làm tab gốc (primary) cho context
-        primaryTabId = firstTabId;
+        // Chỉ lưu tab gốc (primary) lần đầu tiên.
+        // Các lần gọi chrome.tabs.group sau (ví dụ từ _addTabToGroup trong playwrightBackground.mjs)
+        // không được ghi đè primaryTabId đã thiết lập.
+        if (primaryTabId === undefined) {
+          primaryTabId = firstTabId;
+        }
 
         try {
           const tab = await chrome.tabs.get(firstTabId);
@@ -138,7 +142,7 @@ export function initPlaywrightInterceptor() {
   const originalUngroup = chrome.tabs.ungroup;
   chrome.tabs.ungroup = async function (tabIds: any) {
     const stack = new Error().stack || '';
-    if (isInitializing || stack.includes('_onConnectionClose')) {
+    if (isInitializing || stack.includes('_onConnectionClose') || stack.includes('cleanupStalePlaywrightGroups')) {
       console.log('[Interceptor] Đã chặn rã nhóm.');
       return;
     }
