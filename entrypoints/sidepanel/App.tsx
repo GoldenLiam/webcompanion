@@ -10,9 +10,17 @@ import {
   SendOutlined,
   UploadOutlined,
   FormOutlined,
+  PushpinOutlined,
 } from '@ant-design/icons';
 import { socketService } from '@/services/socketService';
+import MarkdownIt from 'markdown-it';
 import './App.css';
+
+const md = new MarkdownIt({
+  html: false,
+  linkify: true,
+  typographer: true,
+});
 
 type Message = {
   id: number;
@@ -132,6 +140,81 @@ function App() {
   const [activeTool, setActiveTool] = useState<{ name: string; input?: string } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [tabsList, setTabsList] = useState<any[]>([]);
+  const [currentTab, setCurrentTab] = useState<any | null>(null);
+  const [isContextExpanded, setIsContextExpanded] = useState(false);
+
+  const handleActivateTab = async (tabId: number | undefined) => {
+    if (typeof tabId !== 'number') return;
+    try {
+      await browser.tabs.update(tabId, { active: true });
+    } catch (err) {
+      console.error('Không thể kích hoạt tab:', err);
+    }
+  };
+
+  const handlePinTab = (tab: any) => {
+    const tabRef = `[${tab.title}](${tab.url})`;
+    setDraft((prev) => {
+      const prefix = prev ? `${prev} ` : '';
+      return `${prefix}${tabRef}`;
+    });
+    void message.success(`Đã ghim tab: ${tab.title}`);
+  };
+
+  useEffect(() => {
+    const updateTabs = async () => {
+      try {
+        const currentWindow = await browser.windows.getCurrent();
+        if (typeof currentWindow.id !== 'number') return;
+
+        const groups = await browser.tabGroups.query({
+          title: 'webbot',
+          windowId: currentWindow.id,
+        });
+        const webbotGroup = groups[0];
+
+        const allTabs = await browser.tabs.query({ currentWindow: true });
+        const activeTab = allTabs.find(t => t.active);
+
+        const groupTabs = webbotGroup
+          ? allTabs.filter((t) => t.groupId === webbotGroup.id)
+          : [];
+        setTabsList(groupTabs);
+
+        let displayTab = null;
+        if (activeTab && webbotGroup && activeTab.groupId === webbotGroup.id) {
+          displayTab = activeTab;
+        } else if (groupTabs.length > 0) {
+          displayTab = groupTabs[0];
+        } else {
+          displayTab = activeTab || null;
+        }
+        setCurrentTab(displayTab);
+      } catch (err) {
+        console.error('Lỗi khi lấy danh sách tab:', err);
+      }
+    };
+
+    void updateTabs();
+
+    const handleTabEvent = () => {
+      void updateTabs();
+    };
+
+    browser.tabs.onCreated.addListener(handleTabEvent);
+    browser.tabs.onRemoved.addListener(handleTabEvent);
+    browser.tabs.onUpdated.addListener(handleTabEvent);
+    browser.tabs.onActivated.addListener(handleTabEvent);
+
+    return () => {
+      browser.tabs.onCreated.removeListener(handleTabEvent);
+      browser.tabs.onRemoved.removeListener(handleTabEvent);
+      browser.tabs.onUpdated.removeListener(handleTabEvent);
+      browser.tabs.onActivated.removeListener(handleTabEvent);
+    };
+  }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -506,6 +589,15 @@ function App() {
     }
   };
 
+  const getTabCountLabel = () => {
+    if (!currentTab) return '';
+    const isActiveInGroup = tabsList.some(t => t.id === currentTab.id);
+    if (isActiveInGroup) {
+      return tabsList.length > 1 ? `+${tabsList.length - 1} tab` : '';
+    } else {
+      return tabsList.length > 0 ? `${tabsList.length} tab` : '';
+    }
+  };
 
   return (
     <div className="webcompanion-sidebar">
@@ -552,13 +644,16 @@ function App() {
                     <span />
                   </div>
                 ) : (
-                  <div className="webcompanion-msg-text">{message.content}</div>
+                  <div
+                    className="webcompanion-msg-text"
+                    dangerouslySetInnerHTML={{ __html: md.render(message.content) }}
+                  />
                 )}
               </div>
             </div>
           ))}
         </div>
-        
+
         {/* Active Tool Running status */}
         {isStreaming && activeTool && (
           <div className="webcompanion-tool-banner">
@@ -610,17 +705,64 @@ function App() {
         )}
 
         {/* Current Active Context Tab Bar */}
-        <div className="webcompanion-context-capsule">
+        <div className="webcompanion-context-capsule" onClick={() => setIsContextExpanded(!isContextExpanded)}>
           <div className="context-left">
             <span className="context-icon-wrapper">
-              <GlobalOutlined style={{ color: '#2563eb' }} />
+              {currentTab?.favIconUrl ? (
+                <img src={currentTab.favIconUrl} className="tab-favicon" style={{ marginRight: '2px' }} alt="" />
+              ) : (
+                <GlobalOutlined style={{ color: '#2563eb' }} />
+              )}
             </span>
-            <span className="context-title">AI ChatHub - Microsoft Edge Addons</span>
-            <span className="context-extra">+4 tab</span>
+            <span className="context-title" title={currentTab?.title || 'Đang tải...'}>
+              {currentTab?.title || 'Đang tải...'}
+            </span>
+            {getTabCountLabel() && (
+              <span className="context-extra">{getTabCountLabel()}</span>
+            )}
             <span className={`socket-dot ${connectionStatus}`} title={`Socket: ${connectionStatus}`} />
           </div>
-          <UpOutlined className="context-expand-icon" />
+          {isContextExpanded ? (
+            <DownOutlined className="context-expand-icon" />
+          ) : (
+            <UpOutlined className="context-expand-icon" />
+          )}
         </div>
+
+        {/* Tab list expanded panel */}
+        {isContextExpanded && (
+          <div className="webcompanion-tabs-list-panel">
+            {tabsList.map((tab) => (
+              <div
+                key={tab.id}
+                className={`webcompanion-tab-item ${tab.active ? 'active' : ''}`}
+                style={{ cursor: 'pointer' }}
+                onClick={() => void handleActivateTab(tab.id)}
+              >
+                <div className="tab-item-left">
+                  {tab.favIconUrl ? (
+                    <img src={tab.favIconUrl} className="tab-favicon" alt="" />
+                  ) : (
+                    <GlobalOutlined className="tab-favicon-fallback" />
+                  )}
+                  <span className="tab-title" title={tab.title}>{tab.title}</span>
+                </div>
+                <div className="tab-item-actions">
+                  <Button
+                    size="small"
+                    type="text"
+                    icon={<PushpinOutlined />}
+                    title="Ghim vào ô nhập"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handlePinTab(tab);
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Composer Chat Input area */}
         {isPickingElement && (

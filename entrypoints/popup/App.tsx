@@ -106,7 +106,7 @@ function App() {
         <div className="action-wrap">
           <Alert
             type="success"
-            message={message}
+            title={message}
             showIcon
           />
           <Button type="primary" icon={<MessageOutlined />} onClick={() => void openCurrentWindowSidePanel()}>
@@ -119,12 +119,12 @@ function App() {
         <div className="action-wrap">
           <Alert
             type="warning"
-            message="Can di chuyen tab vao group webbot"
+            title="Tab hiện tại không thể truy cập"
             description={message}
             showIcon
           />
           <Button type="primary" loading={isMoving} onClick={() => void moveCurrentTabToWebbotGroup()}>
-            Di chuyen tab hien tai vao webbot
+            Di chuyển tab hiện tại vào nhóm webbot
           </Button>
         </div>
       )}
@@ -132,7 +132,7 @@ function App() {
       {viewState === 'error' && (
         <Alert
           type="error"
-          message="Khong the xu ly tab group"
+          title="Đã xảy ra lỗi"
           description={message}
           showIcon
         />
