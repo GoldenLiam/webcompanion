@@ -148,7 +148,7 @@ export const RichComposer = forwardRef<RichComposerRef, RichComposerProps>(
       extensions: [
         StarterKit,
         Placeholder.configure({
-          placeholder: 'Mô tả điều bạn muốn AI làm',
+          placeholder: 'Mô tả điều bạn muốn và AI sẽ làm cho bạn',
         }),
         MentionTab.configure({
           suggestion: {

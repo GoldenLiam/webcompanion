@@ -3,7 +3,6 @@ import './App.css';
 import { Alert, Button, Spin, Typography } from 'antd';
 import { MessageOutlined } from '@ant-design/icons';
 import {
-  inspectOrCreateWebbotGroupForCurrentTab,
   moveTabToWebbotGroup,
 } from '@/services/tabGroupService';
 
@@ -39,22 +38,60 @@ function App() {
 
   const inspectCurrentTab = async () => {
     setViewState('loading');
-    setMessage('Dang kiem tra tab group...');
+    setMessage('Đang kiểm tra tab group...');
 
     try {
-      const result = await inspectOrCreateWebbotGroupForCurrentTab();
-      setActiveTabId(result.activeTabId);
-      setTargetGroupId(result.targetGroupId);
-
-      if (result.status === 'in-group' && await openCurrentWindowSidePanel()) {
-        return;
+      const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+      const currentTab = tabs[0];
+      if (!currentTab || typeof currentTab.id !== 'number' || typeof currentTab.windowId !== 'number') {
+        throw new Error('Không tìm thấy tab hiện tại.');
       }
 
-      setViewState(result.status);
-      setMessage(result.message);
+      const existingGroups = await browser.tabGroups.query({
+        title: 'webbot',
+        windowId: currentTab.windowId,
+      });
+
+      if (existingGroups.length > 0) {
+        const groupId = existingGroups[0].id;
+        setActiveTabId(currentTab.id);
+        setTargetGroupId(groupId);
+
+        if (currentTab.groupId === groupId) {
+          if (await openCurrentWindowSidePanel()) {
+            return;
+          }
+          setViewState('in-group');
+          setMessage('Tab hiện tại đã nằm trong group webbot.');
+        } else {
+          setViewState('needs-move');
+          setMessage('Tab hiện tại chưa nằm trong group webbot.');
+        }
+      } else {
+        setViewState('loading');
+        setMessage('Không tìm thấy nhóm webbot. Đang kết nối tới Webbot socket để kích hoạt...');
+
+        const ws = new WebSocket('ws://localhost:8080');
+
+        ws.onopen = () => {
+          ws.send(JSON.stringify({
+            type: 'playwright_navigate',
+            url: currentTab.url || 'https://google.com'
+          }));
+          setMessage('Đã kết nối tới Webbot. Đang khởi chạy Tab Group...');
+          setTimeout(() => {
+            window.close();
+          }, 2500);
+        };
+
+        ws.onerror = () => {
+          setViewState('error');
+          setMessage('Không thể kết nối tới Webbot server (ws://localhost:8080). Vui lòng chạy ứng dụng Webbot trước.');
+        };
+      }
     } catch (error) {
       const errorMessage =
-        error instanceof Error ? error.message : 'Khong the xu ly tab group luc nay.';
+        error instanceof Error ? error.message : 'Không thể xử lý tab group lúc này.';
       setViewState('error');
       setMessage(errorMessage);
     }
@@ -92,7 +129,7 @@ function App() {
   return (
     <main className="popup-root">
       <Typography.Title level={4} className="title">
-        Webbot Tab Group
+        Webbot
       </Typography.Title>
 
       {viewState === 'loading' && (
