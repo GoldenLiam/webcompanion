@@ -21,10 +21,11 @@ const md = new MarkdownIt({
   html: false,
   linkify: true,
   typographer: true,
+  breaks: true,
 });
 
 const renderMessageContent = (content: string) => {
-  let html = md.render(content);
+  let html = md.render(content).trim();
   // Replace Tab format
   html = html.replace(
     /\[Tab đính kèm: &quot;([^&]+)&quot; \| Link: ([^\]]+)\]/g,
@@ -73,8 +74,6 @@ const initialMessages: Message[] = [];
 
 const suggestions = [
   'Tóm tắt trang này',
-  'Giải thích đoạn đang chọn',
-  'Soạn câu trả lời ngắn',
   'Đề xuất bước tiếp theo',
 ];
 

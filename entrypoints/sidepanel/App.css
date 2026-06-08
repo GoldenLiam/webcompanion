@@ -141,7 +141,6 @@
 
 .webcompanion-msg-text {
   word-break: break-word;
-  white-space: pre-wrap;
 }
 
 /* Footer / Input area */
@@ -950,13 +949,21 @@
 }
 
 /* Placeholder styling */
+.tiptap p.is-editor-empty:first-child {
+  position: relative;
+}
+
 .tiptap p.is-editor-empty:first-child::before {
   color: #8a8886;
   content: attr(data-placeholder);
-  float: left;
-  height: 0;
   pointer-events: none;
   font-style: normal;
+  position: absolute;
+  left: 0;
+  right: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Styled inline mention pills in editor */

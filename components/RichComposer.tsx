@@ -148,7 +148,7 @@ export const RichComposer = forwardRef<RichComposerRef, RichComposerProps>(
       extensions: [
         StarterKit,
         Placeholder.configure({
-          placeholder: 'Nhắn tin cho WebCompanion hoặc @ để đề cập đến một tab',
+          placeholder: 'Mô tả điều bạn muốn AI làm',
         }),
         MentionTab.configure({
           suggestion: {
@@ -327,8 +327,8 @@ export const RichComposer = forwardRef<RichComposerRef, RichComposerProps>(
       insertElement: (element) => {
         if (!editor) return;
         const selectorClean = element.selector;
-        const labelText = selectorClean.length > 15 
-          ? selectorClean.substring(0, 15) + '...' 
+        const labelText = selectorClean.length > 15
+          ? selectorClean.substring(0, 15) + '...'
           : selectorClean;
         editor
           .chain()
@@ -384,9 +384,8 @@ export const RichComposer = forwardRef<RichComposerRef, RichComposerProps>(
               dropdown.items.map((item, idx) => (
                 <div
                   key={item.id}
-                  className={`webcompanion-mention-item ${
-                    idx === dropdown.index ? 'active' : ''
-                  }`}
+                  className={`webcompanion-mention-item ${idx === dropdown.index ? 'active' : ''
+                    }`}
                   onClick={() => {
                     if (suggestionRef.current.command) {
                       suggestionRef.current.command({
