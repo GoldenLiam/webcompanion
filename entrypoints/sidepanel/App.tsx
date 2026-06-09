@@ -11,6 +11,8 @@ import {
   UploadOutlined,
   FormOutlined,
   PushpinOutlined,
+  CopyOutlined,
+  CheckOutlined,
 } from '@ant-design/icons';
 import { socketService } from '@/services/socketService';
 import MarkdownIt from 'markdown-it';
@@ -164,6 +166,21 @@ const ToolCallItem = ({ toolCall }: { toolCall: NonNullable<Message['toolCalls']
 function App() {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [isPickingElement, setIsPickingElement] = useState(false);
+  const [copiedId, setCopiedId] = useState<number | string | null>(null);
+
+  const handleCopy = async (text: string, id: number | string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedId(id);
+      void message.success('Đã sao chép vào bộ nhớ tạm!');
+      setTimeout(() => {
+        setCopiedId(null);
+      }, 2000);
+    } catch (err) {
+      console.error('Không thể sao chép văn bản:', err);
+      void message.error('Sao chép thất bại.');
+    }
+  };
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected');
   const [isStreaming, setIsStreaming] = useState(false);
   const [models, setModels] = useState<any[]>([]);
@@ -696,10 +713,25 @@ function App() {
                     <span />
                   </div>
                 ) : (
-                  <div
-                    className="webcompanion-msg-text"
-                    dangerouslySetInnerHTML={{ __html: renderMessageContent(message.content) }}
-                  />
+                  <>
+                    <div
+                      className="webcompanion-msg-text"
+                      dangerouslySetInnerHTML={{ __html: renderMessageContent(message.content) }}
+                    />
+                    {message.role === 'assistant' && message.content && (
+                      <div className="webcompanion-msg-actions">
+                        <Button
+                          type="text"
+                          size="small"
+                          icon={copiedId === message.id ? <CheckOutlined style={{ color: '#10b981' }} /> : <CopyOutlined />}
+                          onClick={() => handleCopy(message.content, message.id)}
+                          className="webcompanion-copy-btn"
+                          title="Sao chép câu trả lời"
+                        >
+                        </Button>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>
