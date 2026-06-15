@@ -79,9 +79,9 @@ function App() {
             url: currentTab.url || 'https://google.com'
           }));
           setMessage('Đã kết nối tới Webbot. Đang khởi chạy Tab Group...');
-          setTimeout(() => {
-            window.close();
-          }, 2500);
+          // setTimeout(() => {
+          //   window.close();
+          // }, 2500);
         };
 
         ws.onerror = () => {
