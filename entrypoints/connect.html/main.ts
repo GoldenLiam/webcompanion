@@ -34,20 +34,38 @@ async function autoConnectToPlaywright() {
     const tabsResponse = await browser.runtime.sendMessage({ type: "getTabs" });
     
     if (tabsResponse.success && tabsResponse.tabs && tabsResponse.tabs.length > 0) {
-      // Ưu tiên chọn tab đang nằm trong group "webbot" thay vì lấy tabs[0] mù quáng.
-      // Nếu không tìm thấy tab nào trong group, fallback về tab đầu tiên.
-      let targetTab = tabsResponse.tabs[0];
-      try {
-        const groups = await browser.tabGroups.query({ title: "webbot" });
-        if (groups.length > 0) {
-          const webbotGroupId = groups[0].id;
-          const groupTab = tabsResponse.tabs.find((t: any) => t.groupId === webbotGroupId);
-          if (groupTab) {
-            targetTab = groupTab;
+      let targetTab = null;
+
+      // 1. Tìm tab đang active/focused được lưu trong localStorage (khi người dùng click popup kết nối)
+      const lastActiveTabId = Number(localStorage.getItem('lastActiveTabId'));
+      if (lastActiveTabId) {
+        targetTab = tabsResponse.tabs.find((t: any) => t.id === lastActiveTabId);
+      }
+
+      // 2. Nếu không tìm thấy trong localStorage, tìm tab đang active/focused trong danh sách tab hiện có
+      if (!targetTab) {
+        targetTab = tabsResponse.tabs.find((t: any) => t.active === true);
+      }
+
+      // 3. Nếu không tìm thấy tab active, ưu tiên chọn tab đang nằm trong group "webbot"
+      if (!targetTab) {
+        try {
+          const groups = await browser.tabGroups.query({ title: "webbot" });
+          if (groups.length > 0) {
+            const webbotGroupId = groups[0].id;
+            const groupTab = tabsResponse.tabs.find((t: any) => t.groupId === webbotGroupId);
+            if (groupTab) {
+              targetTab = groupTab;
+            }
           }
+        } catch (e) {
+          console.warn("Không thể truy vấn group webbot:", e);
         }
-      } catch (e) {
-        console.warn("Không thể truy vấn group webbot, sử dụng tab mặc định:", e);
+      }
+
+      // 4. Fallback cuối cùng nếu không tìm thấy tab nào phù hợp
+      if (!targetTab) {
+        targetTab = tabsResponse.tabs[0];
       }
 
       const finalResponse = await browser.runtime.sendMessage({

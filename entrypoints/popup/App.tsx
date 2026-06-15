@@ -47,6 +47,9 @@ function App() {
         throw new Error('Không tìm thấy tab hiện tại.');
       }
 
+      // Lưu ID tab hiện tại để trang kết nối biết tab nào cần điều khiển
+      localStorage.setItem('lastActiveTabId', String(currentTab.id));
+
       const existingGroups = await browser.tabGroups.query({
         title: 'webbot',
         windowId: currentTab.windowId,

@@ -61,8 +61,23 @@ export function initPlaywrightInterceptor() {
   const originalGroup = chrome.tabs.group;
   chrome.tabs.group = async function (options: any) {
     if (options && options.groupId === undefined) {
-      const tabIds = Array.isArray(options.tabIds) ? options.tabIds : [options.tabIds];
-      const firstTabId = tabIds[0];
+      let tabIds = Array.isArray(options.tabIds) ? options.tabIds : [options.tabIds];
+      let firstTabId = tabIds[0];
+
+      // Thay vì sử dụng tab mặc định (ví dụ tab số 0), tìm tab hiện tại người dùng đang focus
+      try {
+        const activeTabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+        if (activeTabs && activeTabs[0] && typeof activeTabs[0].id === 'number') {
+          const activeTab = activeTabs[0];
+          if (!isNonDebuggableUrl(activeTab.url)) {
+            firstTabId = activeTab.id;
+            tabIds = [firstTabId];
+            options.tabIds = tabIds;
+          }
+        }
+      } catch (error) {
+        console.error('[Interceptor] Lỗi khi lấy active tab để thay thế tab số 0:', error);
+      }
 
       if (typeof firstTabId === 'number') {
         // Chỉ lưu tab gốc (primary) lần đầu tiên.
