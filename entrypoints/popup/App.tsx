@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import './App.css';
-import { Alert, Button, Spin, Typography } from 'antd';
-import { MessageOutlined } from '@ant-design/icons';
+import { Alert, Button, Spin, Typography, ConfigProvider } from 'antd';
+import { MessageOutlined, LoadingOutlined } from '@ant-design/icons';
 import {
   moveTabToWebbotGroup,
 } from '@/services/tabGroupService';
@@ -130,54 +130,108 @@ function App() {
   }, []);
 
   return (
-    <main className="popup-root">
-      <Typography.Title level={4} className="title">
-        Webbot
-      </Typography.Title>
-
-      {viewState === 'loading' && (
-        <div className="loading-wrap">
-          <Spin size="small" />
-          <Typography.Text>{message}</Typography.Text>
+    <ConfigProvider
+      theme={{
+        token: {
+          colorSuccess: '#10b981',
+          colorWarning: '#f59e0b',
+          colorError: '#ef4444',
+          borderRadius: 12,
+          fontFamily:
+            'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+        },
+        components: {
+          Button: {
+            controlHeight: 38,
+            fontWeight: 600,
+          },
+          Alert: {
+            borderRadiusLG: 12,
+          },
+        },
+      }}
+    >
+      <main className="popup-root">
+        <div className="header-container">
+          <div className="logo-wrapper">
+            <img src="/icon/128.png" className="logo-img" alt="Webbot Icon" />
+          </div>
+          <div className="header-text-wrap">
+            <Typography.Title level={4} className="title-text">
+              Webbot
+            </Typography.Title>
+            <span className="subtitle-badge">Companion</span>
+          </div>
         </div>
-      )}
 
-      {viewState === 'in-group' && (
-        <div className="action-wrap">
-          <Alert
-            type="success"
-            title={message}
-            showIcon
-          />
-          <Button type="primary" icon={<MessageOutlined />} onClick={() => void openCurrentWindowSidePanel()}>
-            Mở Chat
-          </Button>
+        <div className="content-card">
+          {viewState === 'loading' && (
+            <div className="loading-wrap">
+              <Spin indicator={<LoadingOutlined style={{ fontSize: 22 }} spin />} />
+              <Typography.Text className="status-message">{message}</Typography.Text>
+            </div>
+          )}
+
+          {viewState === 'in-group' && (
+            <div className="action-wrap">
+              <Alert
+                type="success"
+                message={message}
+                showIcon
+              />
+              <Button
+                type="primary"
+                icon={<MessageOutlined />}
+                onClick={() => void openCurrentWindowSidePanel()}
+                className="action-button hover-lift"
+                block
+              >
+                Mở Chat
+              </Button>
+            </div>
+          )}
+
+          {viewState === 'needs-move' && (
+            <div className="action-wrap">
+              <Alert
+                type="warning"
+                message="Tab chưa ở trong group"
+                description={message}
+                showIcon
+              />
+              <Button
+                type="primary"
+                loading={isMoving}
+                onClick={() => void moveCurrentTabToWebbotGroup()}
+                className="action-button hover-lift"
+                block
+              >
+                Di chuyển vào nhóm webbot
+              </Button>
+            </div>
+          )}
+
+          {viewState === 'error' && (
+            <div className="action-wrap">
+              <Alert
+                type="error"
+                message="Đã xảy ra lỗi"
+                description={message}
+                showIcon
+              />
+              <Button
+                type="primary"
+                onClick={() => void inspectCurrentTab()}
+                className="action-button hover-lift"
+                block
+              >
+                Thử lại
+              </Button>
+            </div>
+          )}
         </div>
-      )}
-
-      {viewState === 'needs-move' && (
-        <div className="action-wrap">
-          <Alert
-            type="warning"
-            title="Tab hiện tại không thể truy cập"
-            description={message}
-            showIcon
-          />
-          <Button type="primary" loading={isMoving} onClick={() => void moveCurrentTabToWebbotGroup()}>
-            Di chuyển tab hiện tại vào nhóm webbot
-          </Button>
-        </div>
-      )}
-
-      {viewState === 'error' && (
-        <Alert
-          type="error"
-          title="Đã xảy ra lỗi"
-          description={message}
-          showIcon
-        />
-      )}
-    </main>
+      </main>
+    </ConfigProvider>
   );
 }
 
